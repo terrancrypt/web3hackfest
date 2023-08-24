@@ -19,11 +19,13 @@ contract Engine is Ownable {
     error Engine__InsufficientBalance();
     error Engine__BreaksHealthFactor();
     error Engine__ExceedsAllowedAmount();
-    error Engine__PositionNotExists(uint256 positionId);
-    error Engine__OnlyPositionOwner(address positionOwner);
+    error Engine__PositionNotExists();
+    error Engine__OnlyPositionOwner();
+    error Engine__HealthFactorOk();
 
     using OracleLibrary for AggregatorV3Interface;
     using SafeERC20 for IERC20;
+    using SafeERC20 for TcUSD;
     using Arrays for uint256[];
 
     // ===== Types
@@ -55,6 +57,7 @@ contract Engine is Ownable {
     uint256 private constant ADDITIONAL_FEED_PRECISION = 1e10;
     uint256 private constant FEED_PRECISION = 1e8;
     uint256 private constant LIQUIDATION_THRESHOLD = 50;
+    uint256 private constant LIQUIDATION_BONUS = 10;
 
     constructor(address _tcUSD) {
         i_tcUSD = TcUSD(_tcUSD);
@@ -74,6 +77,20 @@ contract Engine is Ownable {
         address indexed owner,
         uint256 amountCollateral,
         uint256 amountToBorrow
+    );
+    event StrengthenPositon(
+        uint256 indexed positionId,
+        uint256 amountCollateralToStrengthen
+    );
+    event PositionPartialLiquidated(
+        uint256 indexed positionId,
+        uint256 amountTcUSDToCover,
+        uint256 amountCollateralEarned
+    );
+    event PositionFullyLiquidated(
+        uint256 indexed positionId,
+        uint256 amountTcUSDToCover,
+        uint256 amountCollateralEarned
     );
 
     //===== External Functions
@@ -170,7 +187,7 @@ contract Engine is Ownable {
 
     function cancelPosition(uint256 positionId) external {
         if (s_positionExists[positionId] == false) {
-            revert Engine__PositionNotExists(positionId);
+            revert Engine__PositionNotExists();
         }
         _revertIfHealthFactorIsBroken(positionId);
         (
@@ -181,7 +198,7 @@ contract Engine is Ownable {
 
         ) = getUniquePosition(positionId);
         if (owner != msg.sender) {
-            revert Engine__OnlyPositionOwner(owner);
+            revert Engine__OnlyPositionOwner();
         }
         uint256 amountTcUSDOfSender = i_tcUSD.balanceOf(msg.sender);
         if (amountToBorrow > amountTcUSDOfSender) {
@@ -190,7 +207,8 @@ contract Engine is Ownable {
 
         s_vault[vaultId].userBalance[msg.sender] += amountCollateral;
         s_positionExists[positionId] = false;
-        i_tcUSD.transferFrom(msg.sender, address(this), amountToBorrow);
+
+        i_tcUSD.safeTransferFrom(msg.sender, address(this), amountToBorrow);
         i_tcUSD.burn(amountToBorrow);
 
         emit PositionCanceled(
@@ -201,7 +219,123 @@ contract Engine is Ownable {
         );
     }
 
-    function strengthenPosition() external {}
+    function strengthenPosition(
+        uint256 positionId,
+        uint256 amountToStrengthen
+    ) external {
+        if (s_positionExists[positionId] == false) {
+            revert Engine__PositionNotExists();
+        }
+        _revertIfHealthFactorIsBroken(positionId);
+        (uint64 vaultId, address owner, , , ) = getUniquePosition(positionId);
+        if (owner != msg.sender) {
+            revert Engine__OnlyPositionOwner();
+        }
+        uint256 amountCollateralDeposited = getCollateralDeposited(vaultId);
+        if (amountCollateralDeposited < amountToStrengthen) {
+            revert Engine__InsufficientBalance();
+        }
+        s_vault[vaultId].userBalance[msg.sender] -= amountToStrengthen;
+        s_position[positionId].amountCollateral += amountToStrengthen;
+
+        emit StrengthenPositon(positionId, amountToStrengthen);
+        _revertIfHealthFactorIsBroken(positionId);
+    }
+
+    function liquidatePosition(
+        uint256 positionId,
+        uint256 amountTcUSDToCover
+    ) external payable {
+        (
+            uint64 vaultId,
+            ,
+            ,
+            uint256 positionAmountToBorrow,
+            uint256 healthFactor
+        ) = getUniquePosition(positionId);
+        if (healthFactor > MIN_HEALTH_FACTOR) {
+            revert Engine__HealthFactorOk();
+        }
+        uint256 senderTcUSDAmount = i_tcUSD.balanceOf(msg.sender);
+        if (senderTcUSDAmount < amountTcUSDToCover) {
+            revert Engine__InsufficientBalance();
+        }
+        address collateral = getVaultAddress(vaultId);
+        uint256 amountCollateralToLiquidate = _getCollateralAmountFormValue(
+            collateral,
+            senderTcUSDAmount
+        );
+
+        uint256 bonusCollateral = (amountCollateralToLiquidate *
+            LIQUIDATION_BONUS) / 100;
+
+        if (amountCollateralToLiquidate < positionAmountToBorrow) {
+            _partialLiquidation(
+                positionId,
+                collateral,
+                amountTcUSDToCover,
+                bonusCollateral
+            );
+        } else {
+            _partialLiquidation(
+                positionId,
+                collateral,
+                amountTcUSDToCover,
+                bonusCollateral
+            );
+        }
+    }
+
+    /**
+     * @notice Partial liquidation => position still exists
+     */
+    function _partialLiquidation(
+        uint256 positionId,
+        address collateral,
+        uint256 amountTcUSDToCover,
+        uint256 collateralBonus
+    ) internal {
+        Position memory position = s_position[positionId];
+        position.amountCollateral -= collateralBonus;
+        position.amountToBorrow -= amountTcUSDToCover;
+
+        i_tcUSD.safeTransferFrom(msg.sender, address(this), amountTcUSDToCover);
+        IERC20(collateral).safeTransfer(msg.sender, collateralBonus);
+
+        emit PositionPartialLiquidated(
+            positionId,
+            amountTcUSDToCover,
+            collateralBonus
+        );
+
+        _revertIfHealthFactorIsBroken(positionId);
+    }
+
+    /**
+     * @notice Full liquidation => position will be closed
+     */
+    function _fullyLiquidation(
+        uint256 positionId,
+        address collateral,
+        uint256 amountTcUSDToCover,
+        uint256 collateralBonus
+    ) internal {
+        Position memory position = s_position[positionId];
+        position.amountCollateral -= collateralBonus;
+        position.amountToBorrow -= amountTcUSDToCover;
+        s_positionExists[positionId] = false;
+
+        i_tcUSD.safeTransferFrom(msg.sender, address(this), amountTcUSDToCover);
+        IERC20(collateral).safeTransfer(msg.sender, collateralBonus);
+
+        emit PositionFullyLiquidated(
+            positionId,
+            amountTcUSDToCover,
+            collateralBonus
+        );
+
+        _revertIfHealthFactorIsBroken(positionId);
+    }
 
     function _calculateAmountCanBorrow(
         address collateral,
@@ -258,7 +392,20 @@ contract Engine is Ownable {
         }
     }
 
+    function _getCollateralAmountFormValue(
+        address collateral,
+        uint256 usdAmountInWei
+    ) internal view returns (uint256) {
+        AggregatorV3Interface priceFeed = AggregatorV3Interface(
+            s_priceFeed[collateral]
+        );
+        (, int256 price, , , ) = priceFeed.staleCheckLatestRoundData();
+        return ((usdAmountInWei * PRECISION) /
+            (uint256(price) * ADDITIONAL_FEED_PRECISION));
+    }
+
     // ===== Getter Functions
+
     function getVaultAddress(uint64 vaultId) public view returns (address) {
         IERC20 vault = s_vault[vaultId].collateral;
         return address(vault);
@@ -391,5 +538,11 @@ contract Engine is Ownable {
         }
 
         return result;
+    }
+
+    function getUniquePositionExists(
+        uint256 positionId
+    ) external view returns (bool) {
+        return s_positionExists[positionId];
     }
 }

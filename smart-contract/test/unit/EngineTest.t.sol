@@ -208,7 +208,7 @@ contract EngineTest is Test {
         );
 
         (
-            uint64 postiionVaultId,
+            uint64 positionVaultId,
             address positionOwner,
             uint256 positionAmountCollateral,
             uint256 positionAmountToBorrow,
@@ -222,7 +222,7 @@ contract EngineTest is Test {
             (beforeUserBalanceInVault - positionAmountCollateral),
             afterUserBalanceInVault
         );
-        assertEq(postiionVaultId, WETH_VAULT_ID);
+        assertEq(positionVaultId, WETH_VAULT_ID);
         assertEq(positionOwner, user);
         assertEq(positionAmountCollateral, WETH_FAUCET_AMOUNT);
         assertEq(positionAmountToBorrow, amountTcUSDCanBorrow);
@@ -264,6 +264,94 @@ contract EngineTest is Test {
             amountTcUSDCanBorrow + 1
         );
         vm.stopPrank();
+    }
+
+    // ===== Test cancelPosition
+    function testCanCanclePosition() public userCreatedPosition {
+        (
+            uint64 vaultId,
+            address positionOwner,
+            uint256 positionAmountCollateral,
+            uint256 positionAmountToBorrow,
+
+        ) = engine.getUniquePosition(0);
+
+        bool beforePositionExists = engine.getUniquePositionExists(0);
+        uint256 beforeTotalSupply = tcUSD.totalSupply();
+
+        vm.startPrank(user);
+        uint256 beforeCollateralDeposited = engine.getCollateralDeposited(
+            vaultId
+        );
+        tcUSD.approve(address(engine), positionAmountToBorrow);
+        engine.cancelPosition(0);
+        uint256 afterCollateralDeposited = engine.getCollateralDeposited(
+            vaultId
+        );
+        vm.stopPrank();
+
+        bool afterPositionExists = engine.getUniquePositionExists(0);
+        uint256 afterTotalSupply = tcUSD.totalSupply();
+
+        assertEq(beforePositionExists, true);
+        assertEq(afterPositionExists, false);
+        assertEq(positionOwner, user);
+        assertEq(
+            (beforeCollateralDeposited + positionAmountCollateral),
+            afterCollateralDeposited
+        );
+        assertEq(
+            (beforeTotalSupply - positionAmountToBorrow),
+            afterTotalSupply
+        );
+    }
+
+    function testRevertIfPostionAlreadyCancel() public userCreatedPosition {
+        (, , , uint256 positionAmountToBorrow, ) = engine.getUniquePosition(0);
+        vm.startPrank(user);
+        tcUSD.approve(address(engine), positionAmountToBorrow);
+        engine.cancelPosition(0);
+        vm.expectRevert(Engine.Engine__PositionNotExists.selector);
+        engine.cancelPosition(0);
+        vm.stopPrank();
+    }
+
+    function testRevertIfNotTheOwner() public userCreatedPosition {
+        vm.expectRevert(Engine.Engine__OnlyPositionOwner.selector);
+        engine.cancelPosition(0);
+    }
+
+    // Test strengthenPosition
+    function testCanStrengthenPostion() public userCreatedPosition {
+        (
+            uint64 vaultId,
+            ,
+            uint256 beforePositionAmountCollateral,
+            ,
+            uint256 beforeHealthFactor
+        ) = engine.getUniquePosition(0);
+
+        vm.startPrank(user);
+        weth.faucet();
+        uint256 amountToStrengthen = (WETH_FAUCET_AMOUNT * 50) / 100;
+        weth.approve(address(engine), amountToStrengthen);
+        engine.depositCollateral(WETH_VAULT_ID, amountToStrengthen);
+        engine.strengthenPosition(vaultId, amountToStrengthen);
+        vm.stopPrank();
+
+        (
+            ,
+            ,
+            uint256 afterPositionAmountCollateral,
+            ,
+            uint256 afterHealthFactor
+        ) = engine.getUniquePosition(0);
+
+        assertEq(
+            (beforePositionAmountCollateral + amountToStrengthen),
+            afterPositionAmountCollateral
+        );
+        assert(beforeHealthFactor < afterHealthFactor);
     }
 
     // ===== Test Getter Functions
