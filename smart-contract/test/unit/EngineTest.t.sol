@@ -5,7 +5,7 @@ import {Test, console} from "forge-std/Test.sol";
 import {TcUSD} from "../../src/TcUSD.sol";
 import {Engine} from "../../src/Engine.sol";
 import {MockWETH} from "../mocks/MockWETH.sol";
-import {AggregatorV3Interface} from "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
+import {MockV3Aggregator} from "../mocks/MockV3Aggregator.sol";
 
 /**
  * @title Unit test for Engine
@@ -28,13 +28,17 @@ contract EngineTest is Test {
     TcUSD public tcUSD;
     address public wETHPriceFeed = 0x694AA1769357215DE4FAC081bf1f309aDC325306;
     address public user = makeAddr("user");
+    address public liquidator = makeAddr("liquidator");
     uint256 public constant WETH_FAUCET_AMOUNT = 10 ether;
     uint64 public constant WETH_VAULT_ID = 0;
+    uint256 public constant MIN_HEALTH_FACTOR = 1e18;
+    uint256 public constant STARTING_LIQUIDATOR_AMOUNT = 10000e18;
 
     function setUp() public {
         (owner, privateKey) = makeAddrAndKey("Owner");
         vm.startBroadcast(privateKey);
         tcUSD = new TcUSD();
+        tcUSD.mint(liquidator, STARTING_LIQUIDATOR_AMOUNT);
         engine = new Engine(address(tcUSD));
         tcUSD.transferOwnership(address(engine));
         weth = new MockWETH();
@@ -70,9 +74,45 @@ contract EngineTest is Test {
         _;
     }
 
+    modifier priceWETHDecrease() {
+        uint8 DECIMALS = 8;
+        int256 ETH_USD_PRICE = 1200e8; // 1ETH = 1200$ - Giá ETH fork test khi code hiện tại là 1700$ [3h32 25/8/2023]
+        MockV3Aggregator mockPriceFeed = new MockV3Aggregator(
+            DECIMALS,
+            ETH_USD_PRICE
+        );
+        vm.prank(owner);
+        engine.setPriceFeed(WETH_VAULT_ID, address(mockPriceFeed));
+        _;
+    }
+
+    function testPriceWETHDecrease()
+        public
+        userCreatedPosition
+        priceWETHDecrease
+    {
+        (
+            uint64 vaultId,
+            ,
+            uint256 positionAmountCollateral,
+            uint256 positionAmountToBorrow,
+            uint256 positionHealthFactor
+        ) = engine.getUniquePosition(0);
+        address collateral = engine.getVaultAddress(vaultId);
+        uint256 usdValue = engine.getUSDValueOfCollateral(
+            collateral,
+            positionAmountCollateral
+        );
+        console.log("Postion Collateral Amount: ", positionAmountCollateral);
+        console.log("Positon Collateral Value: ", usdValue);
+        console.log("Position tcUSD Amount: ", positionAmountToBorrow);
+        console.log("Position Health Factor: ", positionHealthFactor);
+        assert(positionHealthFactor < MIN_HEALTH_FACTOR);
+    }
+
     // ===== Test createVault
     function testOnlyOwnerCanCreateVault() public {
-        vm.expectRevert("Ownable: caller is not the owner");
+        vm.expectRevert("Not allowed");
         engine.createVault(weth, wETHPriceFeed);
     }
 
@@ -306,6 +346,20 @@ contract EngineTest is Test {
         );
     }
 
+    function testRevertIfHealFactorBroken()
+        public
+        userCreatedPosition
+        priceWETHDecrease
+    {
+        (, , , uint256 positionAmountToBorrow, ) = engine.getUniquePosition(0);
+
+        vm.startPrank(user);
+        tcUSD.approve(address(engine), positionAmountToBorrow);
+        vm.expectRevert(Engine.Engine__BreaksHealthFactor.selector);
+        engine.cancelPosition(0);
+        vm.stopPrank();
+    }
+
     function testRevertIfPostionAlreadyCancel() public userCreatedPosition {
         (, , , uint256 positionAmountToBorrow, ) = engine.getUniquePosition(0);
         vm.startPrank(user);
@@ -354,6 +408,137 @@ contract EngineTest is Test {
         assert(beforeHealthFactor < afterHealthFactor);
     }
 
+    // ===== test liquidatePosition
+    function testCanFullyLiquidatePosition()
+        public
+        userCreatedPosition
+        priceWETHDecrease
+    {
+        (
+            uint64 vaultId,
+            ,
+            uint256 beforePositionAmountCollateral,
+            uint256 positionAmountToBorrow,
+
+        ) = engine.getUniquePosition(0);
+
+        address collateral = engine.getVaultAddress(vaultId);
+        uint256 collateralAmountToLiquidate = engine
+            .getCollateralAmountFromValue(collateral, positionAmountToBorrow);
+        uint256 collateralBonus = (collateralAmountToLiquidate * 10) / 100;
+
+        uint256 beforeTcUSDTotalSupply = tcUSD.totalSupply();
+
+        uint256 beforeCollateralBanlanceOfSender = weth.balanceOf(liquidator);
+
+        vm.startPrank(liquidator);
+        tcUSD.approve(address(engine), positionAmountToBorrow);
+        engine.liquidatePosition(0, positionAmountToBorrow);
+        vm.stopPrank();
+
+        bool positionExists = engine.getUniquePositionExists(0);
+
+        (
+            ,
+            ,
+            uint256 afterPositionAmountCollateral,
+            uint256 afterPositionAmountToBorrow,
+
+        ) = engine.getUniquePosition(0);
+
+        uint256 afterTcUSDTotalSupply = tcUSD.totalSupply();
+
+        uint256 afterCollateralBanlanceOfSender = weth.balanceOf(liquidator);
+
+        assertEq(
+            (beforePositionAmountCollateral -
+                (collateralAmountToLiquidate + collateralBonus)),
+            afterPositionAmountCollateral
+        );
+        assertEq(afterPositionAmountToBorrow, 0);
+        assertEq(positionExists, false);
+        assertEq(
+            (beforeTcUSDTotalSupply - positionAmountToBorrow),
+            afterTcUSDTotalSupply
+        );
+        assertEq(
+            (beforeCollateralBanlanceOfSender +
+                (collateralAmountToLiquidate + collateralBonus)),
+            afterCollateralBanlanceOfSender
+        );
+    }
+
+    function testCanPartialLiquidatePosition()
+        public
+        userCreatedPosition
+        priceWETHDecrease
+    {
+        (
+            uint64 vaultId,
+            ,
+            uint256 beforePositionAmountCollateral,
+            uint256 positionAmountToBorrow,
+
+        ) = engine.getUniquePosition(0);
+
+        uint256 amountTcUSDToCover = (positionAmountToBorrow * 80) / 100;
+
+        address collateral = engine.getVaultAddress(vaultId);
+        uint256 collateralAmountToLiquidate = engine
+            .getCollateralAmountFromValue(collateral, amountTcUSDToCover);
+        uint256 collateralBonus = (collateralAmountToLiquidate * 10) / 100;
+
+        uint256 beforeTcUSDTotalSupply = tcUSD.totalSupply();
+
+        uint256 beforeCollateralBanlanceOfSender = weth.balanceOf(liquidator);
+
+        vm.startPrank(liquidator);
+        tcUSD.approve(address(engine), amountTcUSDToCover);
+        engine.liquidatePosition(0, amountTcUSDToCover);
+        vm.stopPrank();
+
+        bool positionExists = engine.getUniquePositionExists(0);
+
+        (
+            ,
+            ,
+            uint256 afterPositionAmountCollateral,
+            uint256 afterPositionAmountToBorrow,
+
+        ) = engine.getUniquePosition(0);
+
+        uint256 afterTcUSDTotalSupply = tcUSD.totalSupply();
+
+        uint256 afterCollateralBanlanceOfSender = weth.balanceOf(liquidator);
+
+        assertEq(
+            (beforePositionAmountCollateral -
+                (collateralAmountToLiquidate + collateralBonus)),
+            afterPositionAmountCollateral
+        );
+        assertEq(
+            afterPositionAmountToBorrow,
+            (positionAmountToBorrow - amountTcUSDToCover)
+        );
+        assertEq(positionExists, true);
+        assertEq(
+            (beforeTcUSDTotalSupply - amountTcUSDToCover),
+            afterTcUSDTotalSupply
+        );
+        assertEq(
+            (beforeCollateralBanlanceOfSender +
+                (collateralAmountToLiquidate + collateralBonus)),
+            afterCollateralBanlanceOfSender
+        );
+    }
+
+    function testRevertLiquidateIfHealthFactorOk() public userCreatedPosition {
+        vm.startPrank(liquidator);
+        vm.expectRevert(Engine.Engine__HealthFactorOk.selector);
+        engine.liquidatePosition(0, 100e18);
+        vm.stopPrank();
+    }
+
     // ===== Test Getter Functions
     function testGetVaultAddress() public {
         address vaultAddress = engine.getVaultAddress(WETH_VAULT_ID);
@@ -397,5 +582,21 @@ contract EngineTest is Test {
         for (uint256 i = 0; i < result.length; i++) {
             console.log(result[i]);
         }
+    }
+
+    function testGetCalculateHealthFactor() public view {
+        uint256 healthFactor = engine.getCalculateHealthFactor(
+            7468156647585000000000,
+            5000000000000000000
+        );
+        console.log(healthFactor);
+    }
+
+    function testGetCollateralAmountFromValue() public priceWETHDecrease {
+        uint256 amountCollateral = engine.getCollateralAmountFromValue(
+            address(weth),
+            7428027897360000000000
+        );
+        console.log(amountCollateral);
     }
 }

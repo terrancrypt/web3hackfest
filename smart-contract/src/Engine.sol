@@ -3,14 +3,15 @@ pragma solidity 0.8.19;
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {AggregatorV3Interface} from "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
 import {Arrays} from "@openzeppelin/contracts/utils/Arrays.sol";
+import {ReentrancyGuard} from "@openzeppelin/contracts/security/ReentrancyGuard.sol";
+import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
 
 import {OracleLibrary} from "./libraries/OracleLibrary.sol";
 import {TcUSD} from "./TcUSD.sol";
 
-contract Engine is Ownable {
+contract Engine is ReentrancyGuard, AccessControl {
     // ===== Error
     error Engine__InvalidVault();
     error Engine__InvalidCollateral();
@@ -52,7 +53,9 @@ contract Engine is Ownable {
     uint256 private s_currentPositionId;
     mapping(uint256 positionId => bool) private s_positionExists;
 
-    uint256 private constant MIN_HEALTH_FACTOR = 1;
+    bytes32 private constant LIQUIDATOR_ROLE = keccak256("LIQUIDATOR_ROLE");
+
+    uint256 private constant MIN_HEALTH_FACTOR = 1e18;
     uint256 private constant PRECISION = 1e18;
     uint256 private constant ADDITIONAL_FEED_PRECISION = 1e10;
     uint256 private constant FEED_PRECISION = 1e8;
@@ -60,6 +63,8 @@ contract Engine is Ownable {
     uint256 private constant LIQUIDATION_BONUS = 10;
 
     constructor(address _tcUSD) {
+        _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
+        _grantRole(LIQUIDATOR_ROLE, msg.sender);
         i_tcUSD = TcUSD(_tcUSD);
     }
 
@@ -93,6 +98,16 @@ contract Engine is Ownable {
         uint256 amountCollateralEarned
     );
 
+    modifier onlyOwner() {
+        require(hasRole(DEFAULT_ADMIN_ROLE, msg.sender), "Not allowed");
+        _;
+    }
+
+    modifier onlyLiquidator() {
+        require(hasRole(LIQUIDATOR_ROLE, msg.sender), "Not allowed");
+        _;
+    }
+
     //===== External Functions
     function createVault(
         IERC20 collateral,
@@ -116,10 +131,24 @@ contract Engine is Ownable {
         return address(collateral);
     }
 
+    function setPriceFeed(
+        uint64 vaultId,
+        address priceFeed
+    ) external onlyOwner {
+        address collateral = getVaultAddress(vaultId);
+        if (collateral == address(0)) {
+            revert Engine__InvalidVault();
+        }
+        if (priceFeed == address(0)) {
+            revert Engine__InvalidPriceFeed();
+        }
+        s_priceFeed[collateral] = priceFeed;
+    }
+
     function depositCollateral(
         uint64 vaultId,
         uint256 amount
-    ) external payable {
+    ) external payable nonReentrant {
         IERC20 vaultAddress = s_vault[vaultId].collateral;
         Vault storage vault = s_vault[vaultId];
         if (address(vaultAddress) == address(0)) {
@@ -131,7 +160,10 @@ contract Engine is Ownable {
         emit Deposit(vaultId, msg.sender, amount);
     }
 
-    function withdrawCollateral(uint64 vaultId, uint256 amount) external {
+    function withdrawCollateral(
+        uint64 vaultId,
+        uint256 amount
+    ) external nonReentrant {
         IERC20 vaultAddress = s_vault[vaultId].collateral;
         Vault storage vault = s_vault[vaultId];
         if (address(vaultAddress) == address(0)) {
@@ -150,7 +182,7 @@ contract Engine is Ownable {
         uint64 vaultId,
         uint256 amountCollateral,
         uint256 amountToBorrow
-    ) external {
+    ) external nonReentrant {
         Vault storage vault = s_vault[vaultId];
         if (address(vault.collateral) == address(0)) {
             revert Engine__InvalidVault();
@@ -245,11 +277,14 @@ contract Engine is Ownable {
     function liquidatePosition(
         uint256 positionId,
         uint256 amountTcUSDToCover
-    ) external payable {
+    ) external payable /*onlyLiquidator*/ nonReentrant {
+        if (s_positionExists[positionId] == false) {
+            revert Engine__PositionNotExists();
+        }
         (
             uint64 vaultId,
             ,
-            ,
+            uint256 positionCollateralAmount,
             uint256 positionAmountToBorrow,
             uint256 healthFactor
         ) = getUniquePosition(positionId);
@@ -263,31 +298,41 @@ contract Engine is Ownable {
         address collateral = getVaultAddress(vaultId);
         uint256 amountCollateralToLiquidate = _getCollateralAmountFormValue(
             collateral,
-            senderTcUSDAmount
+            amountTcUSDToCover
         );
+
+        if (amountCollateralToLiquidate > positionCollateralAmount) {
+            revert("Protocol Breaks");
+            // Chúng ta sẽ không muốn trường hợp này xảy ra, chúng ta vẫn sẽ phải handle trường hợp này trong tương lai
+            // Giá của tài sản thế chấp giảm quá nhanh thì liquidators không thể thanh lý hết các vị thế break health factor, khá tương tự với trường hợp của Terran LUNA
+        }
 
         uint256 bonusCollateral = (amountCollateralToLiquidate *
             LIQUIDATION_BONUS) / 100;
 
-        if (amountCollateralToLiquidate < positionAmountToBorrow) {
+        if (amountTcUSDToCover < positionAmountToBorrow) {
             _partialLiquidation(
                 positionId,
                 collateral,
                 amountTcUSDToCover,
-                bonusCollateral
+                amountCollateralToLiquidate + bonusCollateral
             );
         } else {
-            _partialLiquidation(
+            _fullyLiquidation(
                 positionId,
                 collateral,
                 amountTcUSDToCover,
-                bonusCollateral
+                amountCollateralToLiquidate + bonusCollateral
             );
         }
     }
 
     /**
      * @notice Partial liquidation => position still exists
+     * Nhằm tránh trường hợp một vị thế vay quá lớn, không liquidators nào có đủ số dư để cover khoảng nợ của vị thế đó thì "một cây làm chẳng nên non, nhiều cây chụm lại ăn 10% bonus"
+     * Đây là lý do sẽ phải có thanh lý vị thế một phần để nhiều liquidators có thể cover được khoản nợ của vị thế đó
+     * Mặc dù đối với owner của dự án thì sẽ không có lợi về mặt tiền bạc, nhưng sẽ có lợi lớn hơn về việc an toàn giao thức
+     * Tránh việc đáng tiếc xảy ra là một vị thế quá lớn, không thể đủ số dư tcUSD để cover
      */
     function _partialLiquidation(
         uint256 positionId,
@@ -295,11 +340,12 @@ contract Engine is Ownable {
         uint256 amountTcUSDToCover,
         uint256 collateralBonus
     ) internal {
-        Position memory position = s_position[positionId];
+        Position storage position = s_position[positionId];
         position.amountCollateral -= collateralBonus;
         position.amountToBorrow -= amountTcUSDToCover;
 
         i_tcUSD.safeTransferFrom(msg.sender, address(this), amountTcUSDToCover);
+        i_tcUSD.burn(amountTcUSDToCover);
         IERC20(collateral).safeTransfer(msg.sender, collateralBonus);
 
         emit PositionPartialLiquidated(
@@ -307,8 +353,6 @@ contract Engine is Ownable {
             amountTcUSDToCover,
             collateralBonus
         );
-
-        _revertIfHealthFactorIsBroken(positionId);
     }
 
     /**
@@ -320,21 +364,27 @@ contract Engine is Ownable {
         uint256 amountTcUSDToCover,
         uint256 collateralBonus
     ) internal {
-        Position memory position = s_position[positionId];
+        Position storage position = s_position[positionId];
         position.amountCollateral -= collateralBonus;
         position.amountToBorrow -= amountTcUSDToCover;
         s_positionExists[positionId] = false;
 
         i_tcUSD.safeTransferFrom(msg.sender, address(this), amountTcUSDToCover);
+        i_tcUSD.burn(amountTcUSDToCover);
         IERC20(collateral).safeTransfer(msg.sender, collateralBonus);
+
+        // (, , uint256 restCollateralAmount, , ) = getUniquePosition(positionId);
+        // IERC20(collateral).safeTransfer(owner(), restCollateralAmount);
+        // => Owner can take the rest of collateral amount ? Chủ dự án có thể lấy phần còn lại sau khi đã chia cho liquidator 10% thanh lý?
+        // Hoặc chúng ta có thể chọn phương pháp floating liquidation bonus để thay thế nhằm thu hút liquidators cho dự án, nếu dự án mở rộng hơn
+        // Càng nhiều liquidators thì dự án càng an toàn, nhưng cũng vì vậy mà sẽ bị giảm lợi nhuận của liquidators khi tham gia vào dự án
+        // Đọc thêm lại đây:
 
         emit PositionFullyLiquidated(
             positionId,
             amountTcUSDToCover,
             collateralBonus
         );
-
-        _revertIfHealthFactorIsBroken(positionId);
     }
 
     function _calculateAmountCanBorrow(
@@ -346,6 +396,7 @@ contract Engine is Ownable {
             collateralAmount
         );
         uint256 amountTcUSDUserCanMint = (usdValueOfCollateral * 45) / 100;
+        // Chúng ta không muốn user vừa vay xong giá tài sản thế chấp bị giảm nên chỉ cho user vay 45% khả năng tổng tài sản thế chấp có thể vay
         return amountInWei = amountTcUSDUserCanMint;
     }
 
@@ -363,9 +414,9 @@ contract Engine is Ownable {
 
     function _healthFactor(uint256 positionId) private view returns (uint256) {
         Position memory position = s_position[positionId];
-        address collateralAddress = getVaultAddress(position.vaultId);
+        address collateral = getVaultAddress(position.vaultId);
         uint256 usdValueOfCollateral = _getUSDValue(
-            collateralAddress,
+            collateral,
             position.amountCollateral
         );
         return
@@ -375,14 +426,17 @@ contract Engine is Ownable {
             );
     }
 
+    /**
+     * @dev Tham khảo cách tính: https://docs.aave.com/risk/asset-risk/risk-parameters
+     */
     function _calculateHealthFactor(
-        uint256 amountMinted,
+        uint256 amountBorrowInWei,
         uint256 collateralValueInUSD
     ) internal pure returns (uint256) {
-        if (amountMinted == 0) return type(uint256).max;
+        if (amountBorrowInWei == 0) return type(uint256).max;
         uint256 collateralAdjustedForThreshold = (collateralValueInUSD *
             LIQUIDATION_THRESHOLD) / 100;
-        return (collateralAdjustedForThreshold * PRECISION) / amountMinted;
+        return (collateralAdjustedForThreshold * PRECISION) / amountBorrowInWei;
     }
 
     function _revertIfHealthFactorIsBroken(uint256 positionId) internal view {
@@ -405,21 +459,22 @@ contract Engine is Ownable {
     }
 
     // ===== Getter Functions
-
     function getVaultAddress(uint64 vaultId) public view returns (address) {
         IERC20 vault = s_vault[vaultId].collateral;
         return address(vault);
     }
 
-    function getCurrentVaultId() public view returns (uint64) {
+    function getCurrentVaultId() external view returns (uint64) {
         return s_currentVaultId;
     }
 
-    function getVaultBalance(uint64 vaultId) public view returns (uint256) {
+    function getVaultBalance(uint64 vaultId) external view returns (uint256) {
         return s_vault[vaultId].totalBalance;
     }
 
-    function getAmountCanBorrow(uint64 vaultId) public view returns (uint256) {
+    function getAmountCanBorrow(
+        uint64 vaultId
+    ) external view returns (uint256) {
         address collateral = getVaultAddress(vaultId);
         uint256 amountCollateralOfUser = getCollateralDeposited(vaultId);
         uint256 amountCanBorrowInWei = _calculateAmountCanBorrow(
@@ -432,7 +487,7 @@ contract Engine is Ownable {
     function getCalculateAmountToBorrow(
         uint64 vaultId,
         uint256 collateralAmount
-    ) public view returns (uint256) {
+    ) external view returns (uint256) {
         address collateral = getVaultAddress(vaultId);
         uint256 amountCanBorrowInWei = _calculateAmountCanBorrow(
             collateral,
@@ -450,11 +505,11 @@ contract Engine is Ownable {
     function getUSDValueOfCollateral(
         address collateral,
         uint256 amount
-    ) public view returns (uint256) {
+    ) external view returns (uint256) {
         return _getUSDValue(collateral, amount);
     }
 
-    function getCurrentPositionId() public view returns (uint256) {
+    function getCurrentPositionId() external view returns (uint256) {
         return s_currentPositionId;
     }
 
@@ -481,7 +536,7 @@ contract Engine is Ownable {
 
     function getPositionHealthFactor(
         uint256 positionId
-    ) public view returns (uint256) {
+    ) external view returns (uint256) {
         return _healthFactor(positionId);
     }
 
@@ -491,7 +546,7 @@ contract Engine is Ownable {
 
     function getAllPositionExists(
         address owner
-    ) public view returns (uint256[] memory) {
+    ) external view returns (uint256[] memory) {
         uint256 count = countPosition(owner);
         uint256[] memory positionExists = new uint256[](count);
         uint256 positionExistsCount = 0;
@@ -513,9 +568,10 @@ contract Engine is Ownable {
     }
 
     function getAllLowHealthFactorPositions()
-        public
+        external
         view
         returns (uint256[] memory)
+    /*onlyOwner onlyLiquidator*/
     {
         uint256[] memory lowHealthFactorPositions;
         uint256 lowHealthFactorCount = 0;
@@ -544,5 +600,19 @@ contract Engine is Ownable {
         uint256 positionId
     ) external view returns (bool) {
         return s_positionExists[positionId];
+    }
+
+    function getCalculateHealthFactor(
+        uint256 amountBorrow,
+        uint256 collateralValueInUSD
+    ) external pure returns (uint256) {
+        return _calculateHealthFactor(amountBorrow, collateralValueInUSD);
+    }
+
+    function getCollateralAmountFromValue(
+        address collateral,
+        uint256 usdAmountInWei
+    ) external view returns (uint256) {
+        return _getCollateralAmountFormValue(collateral, usdAmountInWei);
     }
 }
