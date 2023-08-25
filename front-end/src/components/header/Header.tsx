@@ -39,15 +39,15 @@ const Header: React.FC = () => {
       </div>
 
       <nav>
-        <ul className="flex items-center justify-center space-x-4">
+        <ul className="flex items-center justify-center space-x-5">
           <li className="hover:underline transition-all">
             <Link href={"/"}>Home</Link>
           </li>
           <li className="hover:underline transition-all">
-            <Link href={"/borrow"}>Borrow</Link>
+            <Link href={"/"}>Dashboard</Link>
           </li>
           <li className="hover:underline transition-all">
-            <Link href={"/earn"}>Earn</Link>
+            <Link href={"/borrow"}>Borrow</Link>
           </li>
           <li className="hover:underline transition-all">
             <Link href={"/document"}>Document</Link>

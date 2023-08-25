@@ -28,6 +28,27 @@ body {
   animation: zoom 16s alternate infinite;
 }
 
+.ant-table-wrapper .ant-table {
+  background: transparent !important;
+}
+
+.ant-table-wrapper .ant-table-thead .ant-table-cell {
+  background: transparent !important;
+  color: rgba(255, 255, 255, 1);
+}
+
+.ant-table-wrapper .ant-table-tbody .ant-table-cell {
+  color: rgba(255, 255, 255, 1);
+}
+
+.ant-table-wrapper .ant-table-thead .ant-table-cell::before {
+  display: none !important;
+}
+
+.ant-table-wrapper .ant-table-tbody>tr.ant-table-row:hover>td {
+  background-color: transparent !important;
+}
+
 @keyframes zoom {
   0% {
     transform: scale(1);
