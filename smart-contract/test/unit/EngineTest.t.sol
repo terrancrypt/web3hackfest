@@ -9,7 +9,7 @@ import {MockV3Aggregator} from "../mocks/MockV3Aggregator.sol";
 
 /**
  * @title Unit test for Engine
- * @author terrancrypt
+ * @author Terrancrypt
  * @dev Just fork testing with Sepolia Testnet
  * @notice Run test with command: forge test --fork-url https://eth-sepolia.g.alchemy.com/v2/cs5861l2vJk5J5gmRJZgQm9gghoQ82mQ
  * @notice Run coverage with command: forge coverage --fork-url  https://eth-sepolia.g.alchemy.com/v2/cs5861l2vJk5J5gmRJZgQm9gghoQ82mQ

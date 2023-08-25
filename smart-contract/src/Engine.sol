@@ -11,6 +11,14 @@ import {AccessControl} from "@openzeppelin/contracts/access/AccessControl.sol";
 import {OracleLibrary} from "./libraries/OracleLibrary.sol";
 import {TcUSD} from "./TcUSD.sol";
 
+/**
+ * @title Engine for TCProtocol
+ * @author Terrancrypt
+ * @notice Contract chính của toàn bộ dự án tham dự VBI's Web3Hackfest
+ * Engine contract bao gồm nạp, rút tài sản thế chấp, dùng tài sản thế chấp để mở vị thế vay, củng cố và đóng vị thế
+ * Mục tiêu của giao thức là tạo ra một stablecoin thuật toán 1 tcUSD ~ 1 USD pegged
+ */
+
 contract Engine is ReentrancyGuard, AccessControl {
     // ===== Error
     error Engine__InvalidVault();
@@ -24,13 +32,22 @@ contract Engine is ReentrancyGuard, AccessControl {
     error Engine__OnlyPositionOwner();
     error Engine__HealthFactorOk();
 
+    // ===== Types
     using OracleLibrary for AggregatorV3Interface;
     using SafeERC20 for IERC20;
     using SafeERC20 for TcUSD;
     using Arrays for uint256[];
 
-    // ===== Types
+    // ===== State Variables
     TcUSD private immutable i_tcUSD;
+
+    uint256 private constant MIN_HEALTH_FACTOR = 1e18;
+    uint256 private constant PRECISION = 1e18;
+    uint256 private constant ADDITIONAL_FEED_PRECISION = 1e10;
+    uint256 private constant FEED_PRECISION = 1e8;
+    uint256 private constant LIQUIDATION_THRESHOLD = 50;
+    uint256 private constant LIQUIDATION_BONUS = 10;
+    bytes32 private constant LIQUIDATOR_ROLE = keccak256("LIQUIDATOR_ROLE");
 
     struct Vault {
         IERC20 collateral;
@@ -53,21 +70,14 @@ contract Engine is ReentrancyGuard, AccessControl {
     uint256 private s_currentPositionId;
     mapping(uint256 positionId => bool) private s_positionExists;
 
-    bytes32 private constant LIQUIDATOR_ROLE = keccak256("LIQUIDATOR_ROLE");
-
-    uint256 private constant MIN_HEALTH_FACTOR = 1e18;
-    uint256 private constant PRECISION = 1e18;
-    uint256 private constant ADDITIONAL_FEED_PRECISION = 1e10;
-    uint256 private constant FEED_PRECISION = 1e8;
-    uint256 private constant LIQUIDATION_THRESHOLD = 50;
-    uint256 private constant LIQUIDATION_BONUS = 10;
-
+    // ===== Constructor
     constructor(address _tcUSD) {
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
         _grantRole(LIQUIDATOR_ROLE, msg.sender);
         i_tcUSD = TcUSD(_tcUSD);
     }
 
+    // ===== Events
     event VaultCreated(uint64 indexed vaultId, address collateralAddress);
     event Deposit(uint64 indexed vaultId, address indexed from, uint256 amount);
     event Withdraw(uint64 indexed vaultId, address indexed to, uint256 amount);
@@ -98,6 +108,7 @@ contract Engine is ReentrancyGuard, AccessControl {
         uint256 amountCollateralEarned
     );
 
+    // ===== Modifiers
     modifier onlyOwner() {
         require(hasRole(DEFAULT_ADMIN_ROLE, msg.sender), "Not allowed");
         _;
@@ -327,6 +338,11 @@ contract Engine is ReentrancyGuard, AccessControl {
         }
     }
 
+    // ===== Internal Functions
+    /**
+     * @dev Internal function chỉ được gọi khi đã check params truyển vào
+     */
+
     /**
      * @notice Partial liquidation => position still exists
      * Nhằm tránh trường hợp một vị thế vay quá lớn, không liquidators nào có đủ số dư để cover khoảng nợ của vị thế đó thì "một cây làm chẳng nên non, nhiều cây chụm lại ăn 10% bonus"
@@ -375,10 +391,10 @@ contract Engine is ReentrancyGuard, AccessControl {
 
         // (, , uint256 restCollateralAmount, , ) = getUniquePosition(positionId);
         // IERC20(collateral).safeTransfer(owner(), restCollateralAmount);
+
         // => Owner can take the rest of collateral amount ? Chủ dự án có thể lấy phần còn lại sau khi đã chia cho liquidator 10% thanh lý?
         // Hoặc chúng ta có thể chọn phương pháp floating liquidation bonus để thay thế nhằm thu hút liquidators cho dự án, nếu dự án mở rộng hơn
         // Càng nhiều liquidators thì dự án càng an toàn, nhưng cũng vì vậy mà sẽ bị giảm lợi nhuận của liquidators khi tham gia vào dự án
-        // Đọc thêm lại đây:
 
         emit PositionFullyLiquidated(
             positionId,
