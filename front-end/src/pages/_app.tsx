@@ -23,15 +23,10 @@ export default function App({ Component, pageProps }: AppProps) {
   ]);
   const wagmiConfig = createConfig({
     autoConnect: true,
-    connectors: [
-      new InjectedConnector({ chains }),
-      new WalletConnectConnector({
-        chains,
-        options: {
-          projectId,
-        },
-      }),
-    ],
+    connectors: w3mConnectors({
+      chains,
+      projectId,
+    }),
     publicClient,
   });
   const ethereumClient = new EthereumClient(wagmiConfig, chains);
