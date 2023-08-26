@@ -20,7 +20,7 @@ import Link from "next/link";
 interface Vault {
   key: React.Key;
   vaultId: number;
-  vaultAddress: string;
+  vaultAddress: string | null;
   vaultBalance: string;
   vaultValue: string;
   accountBalance: string;
@@ -74,7 +74,7 @@ const AboutPage = () => {
     let accountBalance: string | null;
     try {
       for (let i = 0; i < currentVaultId; i++) {
-        const vaultAddress: string = await getVaultAddress(i);
+        const vaultAddress: string | null = await getVaultAddress(i);
         const vaultBalance: number = await getVaultBalance(i);
         const vaultValue: number = await getUSDValueOfCollateral(
           vaultAddress,

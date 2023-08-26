@@ -19,7 +19,7 @@ export default function Home() {
             target="_blank"
             className="underline"
           >
-            VBI's Web3Hackfest
+            VBI&rsquo;s Web3Hackfest
           </a>
         </h1>
         <p>To learn about the protocol, please read the documentation.</p>
