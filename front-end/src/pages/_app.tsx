@@ -1,6 +1,8 @@
 import "@/styles/globals.css";
 import type { AppProps } from "next/app";
 import Header from "@/components/header/Header";
+import { InjectedConnector } from "wagmi/connectors/injected";
+import { WalletConnectConnector } from "wagmi/connectors/walletConnect";
 
 // Web#Modal Import
 import {
@@ -21,7 +23,15 @@ export default function App({ Component, pageProps }: AppProps) {
   ]);
   const wagmiConfig = createConfig({
     autoConnect: true,
-    connectors: w3mConnectors({ projectId, chains }),
+    connectors: [
+      new InjectedConnector({ chains }),
+      new WalletConnectConnector({
+        chains,
+        options: {
+          projectId,
+        },
+      }),
+    ],
     publicClient,
   });
   const ethereumClient = new EthereumClient(wagmiConfig, chains);

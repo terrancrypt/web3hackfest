@@ -50,10 +50,10 @@ const Header: React.FC = () => {
             <Link href={"/borrow"}>Borrow</Link>
           </li>
           <li className="hover:underline transition-all">
-            <Link href={"/document"}>Document</Link>
+            <Link href={"/faucet"}>Faucet</Link>
           </li>
           <li className="hover:underline transition-all">
-            <Link href={"/faucet"}>Faucet</Link>
+            <Link href={"/document"}>Document</Link>
           </li>
         </ul>
       </nav>

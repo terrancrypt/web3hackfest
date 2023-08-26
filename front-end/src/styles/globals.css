@@ -28,6 +28,7 @@ body {
   animation: zoom 16s alternate infinite;
 }
 
+/* Antd Table */
 .ant-table-wrapper .ant-table {
   background: transparent !important;
 }
@@ -48,6 +49,77 @@ body {
 .ant-table-wrapper .ant-table-tbody>tr.ant-table-row:hover>td {
   background-color: transparent !important;
 }
+
+/* Antd Steps */
+.ant-steps .ant-steps-item-title {
+  color: white !important;
+}
+
+.ant-steps .ant-steps-item-process .ant-steps-item-icon {
+  background-color: black !important;
+  border: #000;
+}
+
+.ant-steps .ant-steps-item-wait .ant-steps-item-icon {
+  background-color: gray !important;
+}
+
+.ant-steps .ant-steps-item-wait .ant-steps-item-icon .ant-steps-icon {
+  color: white !important;
+}
+
+.ant-steps .ant-steps-item-process .ant-steps-item-container .ant-steps-item-content .ant-steps-item-title::after {
+  background-color: white !important;
+}
+
+.ant-steps .ant-steps-item-wait .ant-steps-item-container .ant-steps-item-content .ant-steps-item-title::after {
+  background-color: gray !important;
+}
+
+.ant-steps .ant-steps-item-finish .ant-steps-item-icon .ant-steps-icon {
+  color: black !important;
+}
+
+.ant-steps .ant-steps-item-finish .ant-steps-item-container .ant-steps-item-content .ant-steps-item-title::after {
+  background-color: black !important;
+}
+
+/* Slider */
+.ant-slider-mark-text {
+  color: white !important
+}
+
+.ant-slider-step {
+  background-color: white !important;
+}
+
+.ant-slider .ant-slider-handle:focus::after {
+  box-shadow: 0 0 0 4px #000 !important;
+}
+
+.ant-slider .ant-slider-handle::after {
+  box-shadow: 0 0 0 2px #000 !important;
+}
+
+.ant-slider .ant-slider-dot-active {
+  border-color: #000 !important;
+}
+
+/* Antd Spin */
+.ant-spin .ant-spin-dot-item {
+  background-color: white !important;
+}
+
+.ant-spin-nested-loading .ant-spin .ant-spin-text {
+  color: white !important;
+  text-shadow: none !important;
+}
+
+/* Antd Form */
+.ant-form-vertical .ant-form-item-label>label {
+  color: white !important
+}
+
 
 @keyframes zoom {
   0% {
