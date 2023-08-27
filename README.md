@@ -2,7 +2,7 @@
 
 Sorry for any Vietnamese in the code, or anywhere you see in my project (if you don't understand).
 
-The main contract of the protocol in [here](https://sepolia.etherscan.io/address/0x2b03b87e2774ca700f2a67f713be0158bf0b458c)
+The main contract of the protocol in [here](https://sepolia.etherscan.io/address/0x11946a8ab0fc26d3975519fd031d1440e6088b58)
 
 Website of the project: [https://web3hackfest.vercel.app/](https://web3hackfest.vercel.app/)
 
