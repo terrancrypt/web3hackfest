@@ -4,6 +4,8 @@ Sorry for any Vietnamese in the code, or anywhere you see in my project (if you 
 
 The main contract of the protocol in [here](https://sepolia.etherscan.io/address/0x11946a8ab0fc26d3975519fd031d1440e6088b58)
 
+TcUSD token contract [here](https://sepolia.etherscan.io/address/0xd3b4e71399d221943a3aaf9843b256929054bba8)
+
 Website of the project: [https://web3hackfest.vercel.app/](https://web3hackfest.vercel.app/)
 
 # About
