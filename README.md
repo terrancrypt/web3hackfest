@@ -11,6 +11,13 @@ This project is built to create a stable coin based on the price of dollars. Use
 
 All ideas and suggestions provided are solely based on the inference, reference, and input of a single individual who is part of this project. They have not been audited or consulted with industry experts regarding the protocol and feasibility of the project.
 
+- [Technology stacks](#technology-stacks)
+- [Benefit](#benefit)
+  - [What will the project owner benefit?](#what-will-the-project-owner-benefit)
+  - [What will users benefit?](#what-will-users-benefit)
+- [Liquidators](#liquidators)
+- [Health Factor](#health-factor)
+
 # Technology stacks
 - Front End: [NextJS](https://nextjs.org/)
 - Smart contract: [Foundry](https://getfoundry.sh/)
