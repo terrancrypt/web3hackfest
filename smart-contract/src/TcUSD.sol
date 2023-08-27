@@ -40,7 +40,7 @@ contract TcUSD is ERC20Burnable, Ownable {
         return true;
     }
 
-    // ===== getter functions
+    // ===== Getter functions
     function getTotalSupply() external view returns (uint256) {
         return s_totalSupply;
     }

@@ -14,9 +14,9 @@ import {TcUSD} from "./TcUSD.sol";
 /**
  * @title Engine for TCProtocol
  * @author Terrancrypt
- * @notice Contract chính của toàn bộ dự án tham dự VBI's Web3Hackfest
- * Engine contract bao gồm nạp, rút tài sản thế chấp, dùng tài sản thế chấp để mở vị thế vay, củng cố và đóng vị thế
- * Mục tiêu của giao thức là tạo ra một stablecoin thuật toán 1 tcUSD ~ 1 USD pegged
+ * @notice Main contract of the entire project participating in Web3Hackfest
+ * The Engine contract includes depositing and withdrawing collateral, using collateral to open leveraged positions, managing and closing positions.
+ * The protocol's objective is to create an algorithmic stablecoin where 1 tcUSD ~ 1 USD pegged.
  */
 
 contract Engine is ReentrancyGuard, AccessControl {
@@ -159,7 +159,7 @@ contract Engine is ReentrancyGuard, AccessControl {
     function depositCollateral(
         uint64 vaultId,
         uint256 amount
-    ) external payable nonReentrant {
+    ) external nonReentrant {
         IERC20 vaultAddress = s_vault[vaultId].collateral;
         Vault storage vault = s_vault[vaultId];
         if (address(vaultAddress) == address(0)) {
@@ -288,7 +288,7 @@ contract Engine is ReentrancyGuard, AccessControl {
     function liquidatePosition(
         uint256 positionId,
         uint256 amountTcUSDToCover
-    ) external payable /*onlyLiquidator*/ nonReentrant {
+    ) external /*onlyLiquidator*/ nonReentrant {
         if (s_positionExists[positionId] == false) {
             revert Engine__PositionNotExists();
         }
@@ -314,8 +314,8 @@ contract Engine is ReentrancyGuard, AccessControl {
 
         if (amountCollateralToLiquidate > positionCollateralAmount) {
             revert("Protocol Breaks");
-            // Chúng ta sẽ không muốn trường hợp này xảy ra, chúng ta vẫn sẽ phải handle trường hợp này trong tương lai
-            // Giá của tài sản thế chấp giảm quá nhanh thì liquidators không thể thanh lý hết các vị thế break health factor, khá tương tự với trường hợp của Terran LUNA
+            // We wouldn't want this scenario to happen, but we'll still have to handle this case in the future.
+            // If the collateral's price drops too rapidly, liquidators won't be able to liquidate all positions that break the health factor, similar to the case of Terran LUNA.
         }
 
         uint256 bonusCollateral = (amountCollateralToLiquidate *
@@ -340,15 +340,15 @@ contract Engine is ReentrancyGuard, AccessControl {
 
     // ===== Internal Functions
     /**
-     * @dev Internal function chỉ được gọi khi đã check params truyển vào
+     * @dev Internal function only to be called after checking the provided params.
      */
 
     /**
      * @notice Partial liquidation => position still exists
-     * Nhằm tránh trường hợp một vị thế vay quá lớn, không liquidators nào có đủ số dư để cover khoảng nợ của vị thế đó thì "một cây làm chẳng nên non, nhiều cây chụm lại ăn 10% bonus"
-     * Đây là lý do sẽ phải có thanh lý vị thế một phần để nhiều liquidators có thể cover được khoản nợ của vị thế đó
-     * Mặc dù đối với owner của dự án thì sẽ không có lợi về mặt tiền bạc, nhưng sẽ có lợi lớn hơn về việc an toàn giao thức
-     * Tránh việc đáng tiếc xảy ra là một vị thế quá lớn, không thể đủ số dư tcUSD để cover
+     * To prevent a scenario where a leveraged position becomes too large to be covered by any available liquidator's balance, "one tree alone cannot form a forest, but many trees together can enjoy a 10% bonus".
+     * This is the reason for having partial position liquidation, so that multiple liquidators can collectively cover the debt of that position.
+     * While for the project owner this might not result in monetary gains, it contributes significantly to the protocol's safety.
+     * Avoiding the unfortunate event of an oversized position with insufficient tcUSD balance for coverage.
      */
     function _partialLiquidation(
         uint256 positionId,
@@ -392,9 +392,9 @@ contract Engine is ReentrancyGuard, AccessControl {
         // (, , uint256 restCollateralAmount, , ) = getUniquePosition(positionId);
         // IERC20(collateral).safeTransfer(owner(), restCollateralAmount);
 
-        // => Owner can take the rest of collateral amount ? Chủ dự án có thể lấy phần còn lại sau khi đã chia cho liquidator 10% thanh lý?
-        // Hoặc chúng ta có thể chọn phương pháp floating liquidation bonus để thay thế nhằm thu hút liquidators cho dự án, nếu dự án mở rộng hơn
-        // Càng nhiều liquidators thì dự án càng an toàn, nhưng cũng vì vậy mà sẽ bị giảm lợi nhuận của liquidators khi tham gia vào dự án
+        // => Owner can take the rest of collateral amount ? Can the project owner claim the remaining amount after distributing 10% liquidation bonus to liquidators?
+        // Alternatively, we can consider implementing a floating liquidation bonus method as a replacement to attract more liquidators to the project, especially as it scales.
+        // More liquidators contribute to enhanced project safety, but on the flip side, it might reduce the profitability for liquidators participating in the project.
 
         emit PositionFullyLiquidated(
             positionId,
@@ -412,7 +412,7 @@ contract Engine is ReentrancyGuard, AccessControl {
             collateralAmount
         );
         uint256 amountTcUSDUserCanMint = (usdValueOfCollateral * 45) / 100;
-        // Chúng ta không muốn user vừa vay xong giá tài sản thế chấp bị giảm nên chỉ cho user vay 45% khả năng tổng tài sản thế chấp có thể vay
+        // We aim to prevent a scenario where users borrow and shortly after, the collateral's price drops. Therefore, we'll limit the borrowing capacity to 45% of the total available collateral.
         return amountInWei = amountTcUSDUserCanMint;
     }
 
@@ -443,7 +443,7 @@ contract Engine is ReentrancyGuard, AccessControl {
     }
 
     /**
-     * @dev Tham khảo cách tính: https://docs.aave.com/risk/asset-risk/risk-parameters
+     * @dev Refer to the calculation method: https://docs.aave.com/risk/asset-risk/risk-parameters
      */
     function _calculateHealthFactor(
         uint256 amountBorrowInWei,

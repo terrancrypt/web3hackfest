@@ -76,7 +76,7 @@ contract EngineTest is Test {
 
     modifier priceWETHDecrease() {
         uint8 DECIMALS = 8;
-        int256 ETH_USD_PRICE = 1200e8; // 1ETH = 1200$ - Giá ETH fork test khi code hiện tại là 1700$ [3h32 25/8/2023]
+        int256 ETH_USD_PRICE = 1200e8; // 1 ETH = $1200 - The price of ETH in the test fork is currently $1700 [3:32 AM, August 25th, 2023].
         MockV3Aggregator mockPriceFeed = new MockV3Aggregator(
             DECIMALS,
             ETH_USD_PRICE
