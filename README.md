@@ -17,6 +17,11 @@ All ideas and suggestions provided are solely based on the inference, reference,
   - [What will users benefit?](#what-will-users-benefit)
 - [Liquidators](#liquidators)
 - [Health Factor](#health-factor)
+- [The idea has not been implemented yet](#the-idea-has-not-been-implemented-yet)
+  - [DAO](#dao)
+  - [Floating liquidation bonus](#floating-liquidation-bonus)
+  - [Backend](#backend)
+  - [Automatic liquidation bot](#automatic-liquidation-bot)
 
 # Technology stacks
 - Front End: [NextJS](https://nextjs.org/)
@@ -77,3 +82,15 @@ If the health factor is high, the liquidation bonus will decrease.
 If the health factor is low, the liquidation bonus will increase.
 
 The increase should not exceed 20%, and the decrease should not exceed 5%.
+
+## Backend
+It would be great if I could integrate more backend into the project. This will reduce unnecessary requests for the EVM blockchain side. Additionally, the backend will also store the cached records to further reduce the load on the requests. I had planned to do it with NestJS (NodeJS framework), but time didn't allow.
+
+## Automatic liquidation bot
+The auto-liquidation bot is a core part of maintaining the protocol, protecting it from fluctuations in collateral prices.
+
+In this respect, I am limited because I do not know how to write Python.
+
+The Liquidation bot is open-source software that assists project owners and liquidators who wish to engage with the project. It allows them to install and operate bots that automatically monitor positions with a health factor below 1 and subsequently initiate liquidations. That's the basic idea.
+
+Furthermore, the liquidation bot has the capability to autonomously connect to decentralized exchanges through smart contracts. This enables it to promptly convert the acquired collateral and bonuses into different stablecoins. This feature is implemented to mitigate risks and safeguard assets during market downturns.
