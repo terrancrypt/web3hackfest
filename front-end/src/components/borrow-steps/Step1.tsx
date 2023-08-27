@@ -1,18 +1,18 @@
 import {
+  depositCollateral,
   engineContract,
-  getTcUSDAmountCanBorrow,
   getUSDValueOfCollateral,
   getVaultAddress,
 } from "@/contract-functions/interactEngineContract";
-import { Form, InputNumber, Slider, Spin, message } from "antd";
+import { Form, Slider, Spin, message } from "antd";
 import { useRouter } from "next/router";
-import React, { useState, useEffect, use } from "react";
+import React, { useState, useEffect } from "react";
 import { getAccount, waitForTransaction } from "@wagmi/core";
 import {
   getTokenBalanceOf,
   tokenApprove,
 } from "@/contract-functions/interactTokenContract";
-
+import { formatEther } from "ethers";
 interface Step1Props {
   current: number;
   setCurrent: (value: number) => void;
@@ -23,48 +23,80 @@ const Step1: React.FC<Step1Props> = ({ current, setCurrent }) => {
     query: { vaultId },
   } = useRouter();
   const account = getAccount();
-  const [inputValue, setInputValue] = useState(1);
   const [collateral, setCollateral] = useState("");
-  const [accountBalance, setAccountBalance] = useState(0);
-  const [amountCanBorrow, setAmountCanBorrow] = useState(0);
+  const [inputValue, setInputValue] = useState<bigint>();
+  const [tcUSDValue, setTcUSDValue] = useState<string>();
   const [txLoading, setTxLoading] = useState(false);
-
-  const onChange = (value: any) => {
-    if (isNaN(value)) {
-      return;
-    }
-    setInputValue(value);
-  };
+  const [txHash, setTxHash] = useState("");
+  const [accountBalance, setAccountBalance] = useState<bigint>();
+  const [amountCanBorrow, setAmountCanBorrow] = useState<bigint>();
+  const [displayInputValue, setDisplayInputValue] = useState<string>();
 
   const fetchData = async () => {
     try {
-      const collateral = await getVaultAddress(Number(vaultId));
-      let accountBalance: string | null;
-      if (account.connector != undefined) {
-        accountBalance = await getTokenBalanceOf(account.address, collateral);
-        const collateralPrice = await getUSDValueOfCollateral(collateral, 1);
-        const amountTcUSDCanBorrow =
-          (collateralPrice * Number(accountBalance) * 45) / 100;
-        setAccountBalance(Number(accountBalance));
-        setAmountCanBorrow(amountTcUSDCanBorrow);
+      if (vaultId) {
+        const collateral = await getVaultAddress(Number(vaultId));
+        let accountBalance;
+        let collateralPrice;
+        let amountTcUSDCanBorrow: bigint;
+        if (account.connector != undefined) {
+          accountBalance = await getTokenBalanceOf(account.address, collateral);
+          collateralPrice = await getUSDValueOfCollateral(collateral, 1);
+          if (accountBalance != null) {
+            setAccountBalance(accountBalance);
+            amountTcUSDCanBorrow =
+              (collateralPrice * accountBalance * BigInt(45)) / BigInt(100);
+            setAmountCanBorrow(amountTcUSDCanBorrow);
+          }
+        }
+        if (collateral != null) {
+          setCollateral(collateral);
+        }
       }
-      if (collateral != null) {
-        setCollateral(collateral);
-      }
-    } catch {
+    } catch (error) {
+      console.log(error);
       message.error("Cannot fetch data!");
     }
   };
 
-  const onFinish = (values: any) => {
-    if (values.slider != null) {
-      approveEngine(Number(values.slider));
+  const deposit = async (amount: bigint) => {
+    try {
+      setTxLoading(true);
+      if (vaultId) {
+        const isApprove: boolean = await approveEngine(amount);
+        if (isApprove == true) {
+          const hash = await depositCollateral(
+            Number(vaultId),
+            amount,
+            account.address as any
+          );
+          if (hash == null) {
+            throw message.error("Transaction Error");
+          } else {
+            setTxHash(hash as any);
+            const wait: any = await waitForTransaction({
+              confirmations: 1,
+              hash: hash as any,
+            });
+            if (wait.status == "success") {
+              message.success("Approve success!");
+              setCurrent(current + 1);
+            } else {
+              throw message.error("Transaction failed");
+            }
+          }
+        }
+      }
+    } catch (error) {
+      console.log(error);
+      message.error("Transaction failed");
+    } finally {
+      setTxLoading(false);
     }
   };
 
-  const approveEngine = async (amount: number) => {
+  const approveEngine = async (amount: bigint): Promise<boolean> => {
     try {
-      setTxLoading(true);
       const hash = await tokenApprove(
         account.address,
         collateral,
@@ -72,7 +104,7 @@ const Step1: React.FC<Step1Props> = ({ current, setCurrent }) => {
         amount
       );
       if (hash == null) {
-        message.error("Transaction Error");
+        return false;
       }
       const wait: any = await waitForTransaction({
         confirmations: 1,
@@ -80,96 +112,104 @@ const Step1: React.FC<Step1Props> = ({ current, setCurrent }) => {
       });
       if (wait.status == "success") {
         message.success("Approve success!");
-        setCurrent(current + 1);
+        return true;
       } else {
         message.error("Transaction failed");
+        return false;
       }
     } catch (error) {
-      console.log(error);
-      message.error("Cannot send transaction");
-    } finally {
-      setTxLoading(false);
+      message.error("Cannot approve");
+      return false;
+    }
+  };
+
+  const onFinish = () => {
+    if (inputValue != undefined) {
+      deposit(BigInt(inputValue));
+    }
+  };
+
+  const onChange = (value: any) => {
+    if (isNaN(value)) {
+      return;
+    }
+    const numericValue = BigInt(value);
+    setInputValue(numericValue);
+    setDisplayInputValue(formatEther(BigInt(numericValue)));
+    if (accountBalance != undefined && accountBalance !== BigInt(0)) {
+      let percentage: bigint = (numericValue * BigInt(100)) / accountBalance;
+      if (amountCanBorrow != undefined) {
+        const newTcUSDValue = (amountCanBorrow * percentage) / BigInt(100);
+        setTcUSDValue(formatEther(newTcUSDValue));
+      }
     }
   };
 
   useEffect(() => {
     fetchData();
   }, [account.status]);
+
   return (
-    <div className="px-32 pt-16">
+    <div className="px-32">
       {!txLoading ? (
         <Form onFinish={onFinish} layout="vertical">
-          <div className="flex">
-            <Form.Item
-              name="slider"
-              className="flex-grow"
-              label="Amount Collateral"
-            >
+          <div className="flex pt-16">
+            <Form.Item name="slider" className="flex-grow" initialValue={1}>
               <Slider
                 min={1}
-                max={accountBalance}
+                max={Number(accountBalance)}
                 onChange={onChange}
                 value={typeof inputValue === "number" ? inputValue : 0}
-              />
-            </Form.Item>
-
-            <Form.Item
-              name="slider"
-              label={`Max: ${accountBalance}`}
-              labelAlign="right"
-            >
-              <InputNumber
-                min={1}
-                max={accountBalance}
-                style={{ margin: "0 16px" }}
-                value={inputValue}
-                onChange={onChange}
-              />
-            </Form.Item>
-          </div>
-          <div className="flex">
-            <Form.Item name="slider" className="flex-grow" label="Amount tcUSD">
-              <Slider
-                min={1}
-                max={amountCanBorrow}
-                onChange={onChange}
-                value={typeof inputValue === "number" ? inputValue : 0}
-              />
-            </Form.Item>
-
-            <Form.Item
-              name="slider"
-              label={`Max: ${amountCanBorrow}`}
-              labelAlign="right"
-            >
-              <InputNumber
-                min={1}
-                max={amountCanBorrow}
-                style={{ margin: "0 16px" }}
-                value={inputValue}
-                onChange={onChange}
+                tooltip={{ open: false }}
               />
             </Form.Item>
           </div>
 
-          <Form.Item>
-            <button
-              type="submit"
-              className="p-4 rounded-xl bg-black text-white hover:scale-90 transition-all"
-            >
-              Approve
-            </button>
-          </Form.Item>
+          <p className="text-white w-full pb-3 text-left">
+            Amount collateral:{" "}
+            {displayInputValue ? Number(displayInputValue).toFixed(2) : 0}
+          </p>
+          <p className="text-white w-full pb-10 text-left">
+            Amount tcUSD Can Borrow:{" "}
+            {tcUSDValue ? Number(tcUSDValue).toFixed(2) : 0}
+          </p>
+
+          <div className="flex justify-between items-center">
+            <Form.Item>
+              <button
+                type="submit"
+                className="p-4 rounded-xl bg-black text-white hover:scale-90 transition-all"
+              >
+                Deposit
+              </button>
+            </Form.Item>
+            <div className="flex justify-center items-center w-[50px] whitespace-nowrap gap-2 pb-8 pr-20">
+              <p className="text-white">Had deposited?</p>{" "}
+              <button
+                className="px-4 py-2 rounded-xl border text-white hover:scale-90 transition-all"
+                onClick={() => setCurrent(current + 1)}
+              >
+                Next
+              </button>
+            </div>
+          </div>
         </Form>
       ) : (
         <>
-          <Spin
-            size="large"
-            tip="Transaction in progress..."
-            spinning={txLoading}
-          >
-            <div className="content" />
-          </Spin>
+          <div className="space-x-4">
+            <Spin size="large" spinning={txLoading} />
+            {txHash != "" ? (
+              <a
+                className="bg-black tex-white rounded-lg p-2 text-sm hover:scale-90"
+                target="_blank"
+                href={`https://sepolia.etherscan.io/tx/${txHash}`}
+              >
+                view your transaction
+              </a>
+            ) : (
+              <></>
+            )}
+          </div>
         </>
       )}
     </div>

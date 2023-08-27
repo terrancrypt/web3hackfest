@@ -44,7 +44,7 @@ const Header: React.FC = () => {
             <Link href={"/"}>Home</Link>
           </li>
           <li className="hover:underline transition-all">
-            <Link href={"/"}>Dashboard</Link>
+            <Link href={"/dashboard"}>Dashboard</Link>
           </li>
           <li className="hover:underline transition-all">
             <Link href={"/borrow"}>Borrow</Link>
@@ -53,7 +53,14 @@ const Header: React.FC = () => {
             <Link href={"/faucet"}>Faucet</Link>
           </li>
           <li className="hover:underline transition-all">
-            <Link href={"/document"}>Document</Link>
+            <a
+              target="_blank"
+              href={
+                "https://github.com/terrancrypt/web3hackfest/tree/master#about"
+              }
+            >
+              Docs
+            </a>
           </li>
         </ul>
       </nav>

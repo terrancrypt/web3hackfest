@@ -5,11 +5,8 @@ import { InjectedConnector } from "wagmi/connectors/injected";
 import { WalletConnectConnector } from "wagmi/connectors/walletConnect";
 
 // Web#Modal Import
-import {
-  EthereumClient,
-  w3mConnectors,
-  w3mProvider,
-} from "@web3modal/ethereum";
+import { EthereumClient, w3mConnectors } from "@web3modal/ethereum";
+import { alchemyProvider } from "wagmi/providers/alchemy";
 import { Web3Modal } from "@web3modal/react";
 import { configureChains, createConfig, sepolia, WagmiConfig } from "wagmi";
 
@@ -17,9 +14,10 @@ export default function App({ Component, pageProps }: AppProps) {
   // Web3Modal Config
   const chains = [sepolia];
   const projectId = "8113267d88fce267d26e0b99c63b53a6";
+  const apiKey = "cs5861l2vJk5J5gmRJZgQm9gghoQ82mQ";
 
   const { publicClient } = configureChains(chains, [
-    w3mProvider({ projectId }),
+    alchemyProvider({ apiKey }),
   ]);
   const wagmiConfig = createConfig({
     autoConnect: true,

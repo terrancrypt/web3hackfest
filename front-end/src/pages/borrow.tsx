@@ -2,7 +2,6 @@ import { Table, message } from "antd";
 import { ColumnsType } from "antd/es/table";
 import Head from "next/head";
 import React, { useEffect, useState } from "react";
-import MockTokenABI from "../abis/MockTokenABI.json";
 import { getAccount } from "@wagmi/core";
 import {
   getCurrentVaultId,
@@ -16,6 +15,7 @@ import {
   getTokenSymbol,
 } from "@/contract-functions/interactTokenContract";
 import Link from "next/link";
+import { BigNumberish, formatEther } from "ethers";
 
 interface Vault {
   key: React.Key;
@@ -62,7 +62,7 @@ const columns: ColumnsType<Vault> = [
   },
 ];
 
-const AboutPage = () => {
+const Borrow = () => {
   const [vaultData, setVaultData] = useState<Vault[]>();
   const [loading, setLoading] = useState(false);
   const account = getAccount();
@@ -71,33 +71,32 @@ const AboutPage = () => {
     setLoading(true);
     const vaultData: Vault[] = [];
     const currentVaultId: number = await getCurrentVaultId();
-    let accountBalance: string | null;
+    let accountBalance: bigint | null;
     try {
       for (let i = 0; i < currentVaultId; i++) {
         const vaultAddress: string | null = await getVaultAddress(i);
-        const vaultBalance: number = await getVaultBalance(i);
-        const vaultValue: number = await getUSDValueOfCollateral(
+        const vaultBalance: bigint = await getVaultBalance(i);
+        const vaultValue = await getUSDValueOfCollateral(
           vaultAddress,
-          vaultBalance
+          Number(vaultBalance)
         );
         const tokenName: string | null = await getTokenName(vaultAddress);
         const tokenSymbol: string | null = await getTokenSymbol(vaultAddress);
-        if (account.isConnected) {
-          accountBalance = await getTokenBalanceOf(
-            account.address,
-            vaultAddress
-          );
-          accountBalance = accountBalance + ` ${tokenSymbol}`;
-        } else {
-          accountBalance = "Wallet connection required";
-        }
+        accountBalance = await getTokenBalanceOf(account.address, vaultAddress);
+
         vaultData.push({
           key: i + 1,
           vaultId: i,
           vaultAddress,
-          vaultBalance: `${vaultBalance} ${tokenSymbol}`,
-          vaultValue: `${vaultValue}$`,
-          accountBalance,
+          vaultBalance:
+            Number(formatEther(vaultBalance as BigNumberish)).toFixed(2) +
+            ` ${tokenSymbol}`,
+          vaultValue:
+            `$ ` +
+            Number(formatEther(vaultValue as BigNumberish)).toLocaleString(),
+          accountBalance:
+            Number(formatEther(accountBalance as BigNumberish)).toFixed(2) +
+            ` ${tokenSymbol}`,
           tokenName: `${tokenSymbol}/tcUSD`,
           tokenSymbol,
         });
@@ -134,4 +133,4 @@ const AboutPage = () => {
   );
 };
 
-export default AboutPage;
+export default Borrow;

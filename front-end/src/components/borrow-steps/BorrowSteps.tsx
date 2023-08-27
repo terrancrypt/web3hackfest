@@ -4,19 +4,15 @@ import Step1 from "./Step1";
 import Step2 from "./Step2";
 
 const BorrowSteps = () => {
-  const [current, setCurrent] = useState(0);
+  const [current, setCurrent] = useState(1);
   const steps = [
     {
-      title: "Approve",
+      title: "Deposit Collateral",
       content: <Step1 current={current} setCurrent={setCurrent} />,
     },
     {
-      title: "Deposit Collateral",
-      content: <Step2 current={current} setCurrent={setCurrent} />,
-    },
-    {
       title: "Create Position",
-      content: "Last-content",
+      content: <Step2 current={current} setCurrent={setCurrent} />,
     },
   ];
 

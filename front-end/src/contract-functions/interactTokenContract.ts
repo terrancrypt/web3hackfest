@@ -6,6 +6,7 @@ import {
   switchNetwork,
 } from "@wagmi/core";
 import MockTokenABI from "@/abis/MockTokenABI.json";
+import { BigNumberish } from "ethers";
 
 const getTokenName = async (address: any): Promise<string | null> => {
   try {
@@ -40,13 +41,13 @@ const getTokenSymbol = async (address: any): Promise<string | null> => {
 const getTokenBalanceOf = async (
   address: any,
   token: any
-): Promise<string | null> => {
+): Promise<bigint | null> => {
   try {
     const data = await fetchBalance({
       address,
       token,
     });
-    return data.formatted;
+    return data.value;
   } catch (error) {
     console.log("Cannot get token symbol!");
     return null;
@@ -57,7 +58,7 @@ const tokenApprove = async (
   owner: any,
   token: string,
   spender: string,
-  amount: number
+  amount: bigint
 ): Promise<string | null> => {
   try {
     const { hash } = await writeContract({

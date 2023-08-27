@@ -19,10 +19,20 @@ export default function Home() {
             target="_blank"
             className="underline"
           >
-            VBI&rsquo;s Web3Hackfest
+            Web3Hackfest
           </a>
         </h1>
-        <p>To learn about the protocol, please read the documentation.</p>
+        <p>
+          To learn about the protocol, please read the{" "}
+          <a
+            href="https://github.com/terrancrypt/web3hackfest/tree/master#about"
+            target="_blank"
+            className="underline"
+          >
+            documentation
+          </a>
+          .
+        </p>
         <p>To use the protocol, please get the necessary tokens before use.</p>
         <p>
           You need to get ETH at{" "}
@@ -36,8 +46,7 @@ export default function Home() {
           for transaction fees for borrow TCUSD stablecoin.
         </p>
         <p>
-          Some other collateral are WETH, WBTC, USDT, USDC and DAI you can get
-          in{" "}
+          Some other collateral are WETH, WBTC you can get in{" "}
           <Link href="/faucet" className="underline">
             Faucet
           </Link>

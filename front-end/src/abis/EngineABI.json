@@ -352,7 +352,7 @@
     ],
     "name": "depositCollateral",
     "outputs": [],
-    "stateMutability": "payable",
+    "stateMutability": "nonpayable",
     "type": "function"
   },
   {
@@ -554,7 +554,7 @@
     ],
     "name": "liquidatePosition",
     "outputs": [],
-    "stateMutability": "payable",
+    "stateMutability": "nonpayable",
     "type": "function"
   },
   {

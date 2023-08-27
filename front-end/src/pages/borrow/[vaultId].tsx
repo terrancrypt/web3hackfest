@@ -15,15 +15,16 @@ import React, { Fragment, useEffect, useState } from "react";
 import { getAccount } from "@wagmi/core";
 import { Skeleton, message } from "antd";
 import BorrowSteps from "@/components/borrow-steps/BorrowSteps";
+import { BigNumberish, formatEther } from "ethers";
 
 interface Vault {
   collateral: string | null;
-  price: number;
+  price: string;
   tokenName: string | null;
   tokenSymbol: string | null;
   accountBalance: string | null;
-  accountDeposited: number | null;
-  accountTcUSDCanBorrow: number | null;
+  accountDeposited: string | null;
+  accountTcUSDCanBorrow: string | null;
 }
 
 const BorrowPage = () => {
@@ -37,9 +38,9 @@ const BorrowPage = () => {
   const fetchData = async () => {
     try {
       setLoading(true);
-      let accountBalance: string | null;
-      let accountDeposited: number | null;
-      let accountTcUSDCanBorrow: number | null;
+      let accountBalance: bigint | null;
+      let accountDeposited: bigint | null;
+      let accountTcUSDCanBorrow: bigint | null;
       if (vaultId) {
         const collateral = await getVaultAddress(Number(vaultId));
         const price = await getUSDValueOfCollateral(collateral, 1);
@@ -59,23 +60,36 @@ const BorrowPage = () => {
             Number(vaultId),
             account.address as string
           );
-        } else {
-          accountBalance = null;
-          accountDeposited = null;
-          accountTcUSDCanBorrow = null;
-        }
 
-        setVault({
-          collateral,
-          price,
-          tokenName,
-          tokenSymbol,
-          accountBalance,
-          accountDeposited,
-          accountTcUSDCanBorrow,
-        });
+          setVault({
+            collateral,
+            price: Number(price).toFixed(2),
+            tokenName,
+            tokenSymbol,
+            accountBalance: Number(
+              formatEther(accountBalance as BigNumberish)
+            ).toFixed(2),
+            accountDeposited: Number(
+              formatEther(accountDeposited as BigNumberish)
+            ).toFixed(2),
+            accountTcUSDCanBorrow: Number(
+              formatEther(accountTcUSDCanBorrow as BigNumberish)
+            ).toFixed(2),
+          });
+        } else {
+          setVault({
+            collateral,
+            price: Number(price).toFixed(2),
+            tokenName,
+            tokenSymbol,
+            accountBalance: null,
+            accountDeposited: null,
+            accountTcUSDCanBorrow: null,
+          });
+        }
       }
     } catch (error) {
+      console.log(error);
       message.error("Failed to fetch data!");
     } finally {
       setLoading(false);
@@ -84,7 +98,7 @@ const BorrowPage = () => {
 
   useEffect(() => {
     fetchData();
-  }, [vaultId, account.status]);
+  }, [account.status, vaultId]);
 
   const renderVaultInfor = () => {
     if (loading === true) {
@@ -109,7 +123,7 @@ const BorrowPage = () => {
               Wallet balance: {vault?.accountBalance} {vault?.tokenSymbol}
             </p>
             <p className="mt-3">
-              Total Deposited: {vault?.accountDeposited} {vault?.tokenSymbol}
+              Total deposited: {vault?.accountDeposited} {vault?.tokenSymbol}
             </p>
             <p className="mt-3">
               Avaiable tcUSD to borrow: {vault?.accountTcUSDCanBorrow}
@@ -132,7 +146,11 @@ const BorrowPage = () => {
           {renderVaultInfor()}
         </div>
         <div className="flex-grow bg-white bg-opacity-20 rounded-xl p-4">
-          <BorrowSteps />
+          {!account ? (
+            <BorrowSteps />
+          ) : (
+            <p>You need to connect your wallet to use the borrow function</p>
+          )}
         </div>
       </section>
     </>
