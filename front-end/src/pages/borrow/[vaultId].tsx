@@ -146,7 +146,7 @@ const BorrowPage = () => {
           {renderVaultInfor()}
         </div>
         <div className="flex-grow bg-white bg-opacity-20 rounded-xl p-4">
-          {!account ? (
+          {account ? (
             <BorrowSteps />
           ) : (
             <p>You need to connect your wallet to use the borrow function</p>

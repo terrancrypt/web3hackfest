@@ -59,7 +59,7 @@ const Faucet = () => {
             address: addressInfo.address as any,
             token: `0x${item.address}`,
           });
-          balances[item.address] = balance.formatted;
+          balances[item.address] = Number(balance.formatted).toFixed(2);
         } catch (error) {
           console.error(
             `Error fetching balance for token ${item.name}:`,
