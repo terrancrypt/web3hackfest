@@ -2,9 +2,9 @@
 
 Sorry for any Vietnamese in the code, or anywhere you see in my project (if you don't understand).
 
-The main contract of the protocol in [here](https://sepolia.etherscan.io/address/0xdd15ec62c853e492a6e31b7eba2e9a2ecfbc123f#code).
+The main contract of the protocol in [here](https://sepolia.etherscan.io/address/0x2b03b87e2774ca700f2a67f713be0158bf0b458c)
 
-Website of the project: [https://web3hackfest.vercel.app/](https://web3hackfest.vercel.app/).
+Website of the project: [https://web3hackfest.vercel.app/](https://web3hackfest.vercel.app/)
 
 # About
 This project is built to create a stable coin based on the price of dollars. Users can use their collateral (WETH or WBTC or more) to borrow (or mint) the tcUSD stable coin with no borrow fees.
