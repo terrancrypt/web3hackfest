@@ -165,6 +165,10 @@ contract Engine is ReentrancyGuard, AccessControl {
         if (address(vaultAddress) == address(0)) {
             revert Engine__InvalidVault();
         }
+        uint256 userBalance = vaultAddress.balanceOf(msg.sender);
+        if (amount > userBalance) {
+            revert Engine__InsufficientBalance();
+        }
         vault.totalBalance += amount;
         vault.userBalance[msg.sender] += amount;
         vaultAddress.safeTransferFrom(msg.sender, address(this), amount);

@@ -132,6 +132,8 @@ contract EngineTest is Test {
 
     // ===== Test depositCollateral
     function testDepositCollateral() public {
+        uint256 beforeUserBalance = weth.balanceOf(user);
+        uint256 befforeEngineBalance = weth.balanceOf(address(engine));
         vm.startPrank(user);
         weth.approve(address(engine), WETH_FAUCET_AMOUNT);
         engine.depositCollateral(WETH_VAULT_ID, WETH_FAUCET_AMOUNT);
@@ -142,8 +144,24 @@ contract EngineTest is Test {
 
         uint256 expectedVaultBalance = engine.getVaultBalance(WETH_VAULT_ID);
 
+        uint256 afterUserBalance = weth.balanceOf(user);
+        uint256 afterEngineBalance = weth.balanceOf(address(engine));
+
         assertEq(expectedUserBalance, WETH_FAUCET_AMOUNT);
         assertEq(expectedVaultBalance, WETH_FAUCET_AMOUNT);
+        assertEq((beforeUserBalance - WETH_FAUCET_AMOUNT), afterUserBalance);
+        assertEq(
+            (befforeEngineBalance + WETH_FAUCET_AMOUNT),
+            afterEngineBalance
+        );
+    }
+
+    function testRevertIfInsufficientBalance() public {
+        vm.startPrank(user);
+        weth.approve(address(engine), WETH_FAUCET_AMOUNT);
+        vm.expectRevert(Engine.Engine__InsufficientBalance.selector);
+        engine.depositCollateral(WETH_VAULT_ID, WETH_FAUCET_AMOUNT + 1);
+        vm.stopPrank();
     }
 
     // ===== Test withdrawCollateral
