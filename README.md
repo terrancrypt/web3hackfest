@@ -2,11 +2,17 @@
 
 Sorry for any Vietnamese in the code, or anywhere you see in my project (if you don't understand).
 
-The main contract of the protocol in [here](https://sepolia.etherscan.io/address/0x11946a8ab0fc26d3975519fd031d1440e6088b58)
+Winnning Project In Defi Track Of [Ref Finnane](https://www.ref.finance/) At [Web3 Hackfest 2023](https://devfolio.co/projects/tc-protocol-e5f8).
+The project's interface has been upgraded, all functions of the smart contract remain the same as when submitting the project to the hackathon.
 
-TcUSD token contract [here](https://sepolia.etherscan.io/address/0xd3b4e71399d221943a3aaf9843b256929054bba8)
+Old interface: [https://web3hackfest.vercel.app](https://tcprotocol.vercel.app/).
 
-Website of the project: [https://web3hackfest.vercel.app/](https://web3hackfest.vercel.app/)
+Old github repo: [here](https://github.com/terrancrypt/web3hackfest).
+
+Link to the project at Web3 Hackfest [here](https://devfolio.co/projects/tc-protocol-e5f8).
+
+New interface (with multi-chain upgrades): [https://tcprotocol.vercel.app/](https://tcprotocol.vercel.app/).
+New repo: [https://github.com/terrancrypt/tcprotocol](https://github.com/terrancrypt/tcprotocol)
 
 # About
 This project is built to create a stable coin based on the price of dollars. Users can use their collateral (WETH or WBTC or more) to borrow (or mint) the tcUSD stable coin with no borrow fees.
