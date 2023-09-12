@@ -12,7 +12,8 @@ Old github repo: [here](https://github.com/terrancrypt/web3hackfest).
 Link to the project at Web3 Hackfest [here](https://devfolio.co/projects/tc-protocol-e5f8).
 
 New interface (with multi-chain upgrades): [https://tcprotocol.vercel.app/](https://tcprotocol.vercel.app/).
-New repo: [https://github.com/terrancrypt/tcprotocol](https://github.com/terrancrypt/tcprotocol)
+
+New github repo: [https://github.com/terrancrypt/tcprotocol](https://github.com/terrancrypt/tcprotocol)
 
 # About
 This project is built to create a stable coin based on the price of dollars. Users can use their collateral (WETH or WBTC or more) to borrow (or mint) the tcUSD stable coin with no borrow fees.
