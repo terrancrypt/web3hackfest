@@ -16,14 +16,6 @@ const BorrowSteps = () => {
     },
   ];
 
-  const next = () => {
-    setCurrent(current + 1);
-  };
-
-  const prev = () => {
-    setCurrent(current - 1);
-  };
-
   const items = steps.map((item) => ({
     key: item.title,
     title: item.title,
@@ -36,11 +28,11 @@ const BorrowSteps = () => {
   };
 
   return (
-    <>
+    <div>
       <Steps current={current} items={items} />
       <div style={contentStyle}>{steps[current].content}</div>
       <div style={{ marginTop: 24 }}></div>
-    </>
+    </div>
   );
 };
 
